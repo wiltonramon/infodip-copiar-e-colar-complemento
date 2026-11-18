@@ -2,7 +2,7 @@
 
 Script de usuário para o **INFODIP** (TSE) que preenche o campo **Complemento** com o número da comunicação, corrige repetições e copia o texto final para a área de transferência com um único clique.
 
-- **Versão:** 4.6.1
+- **Versão:** 4.6.2
 - **Autor:** Ramon Machado
 - **Licença:** GPL-3.0-or-later
 - **Requer:** Tampermonkey (ou gerenciador compatível com `GM.setClipboard`)
@@ -60,6 +60,7 @@ A palavra só é removida quando aparece isolada. Textos como `MINFODIPX` não s
 ### Proteções
 - Bloqueia cliques repetidos enquanto a operação está em andamento.
 - Confere novamente o campo e os números visíveis dentro do modal **no momento do clique**, inclusive quando a tela é atualizada.
+- Na interface antiga, reconhece o bloco do campo pelo botão **Processar Comunicação no Sistema ELO** ou pelo formulário do próprio campo.
 - Não age nas páginas de consulta (lista abaixo).
 
 ---
@@ -164,8 +165,9 @@ As etapas da preparação ficam na lista `ETAPAS`, em ordem: `normalizar`, `cola
 | Função | O que faz |
 |---|---|
 | `limiteDeCaracteres` | Calcula o limite efetivo (70 ou o `maxlength` do campo). |
-| `localizarCampo` | Encontra o campo Complemento visível e único no modal. |
-| `localizarComunicacoes` | Identifica os números distintos e visíveis que pertencem ao modal. |
+| `localizarContexto` | Identifica o modal, o bloco da comunicação na interface antiga ou o formulário do campo. |
+| `localizarCampo` | Encontra o campo Complemento visível e único no contexto identificado. |
+| `localizarComunicacoes` | Identifica os números distintos e visíveis no mesmo contexto. |
 | `exibirAviso` / `ocultarAviso` | Mostram e escondem o aviso na camada superior do navegador (`popover`). |
 | `destacarCampo` | Destaca o campo em verde sem deixar a cor presa. |
 | `definirValor` | Grava o valor e dispara os eventos `input` e `change`. |
@@ -178,6 +180,6 @@ As etapas da preparação ficam na lista `ETAPAS`, em ordem: `normalizar`, `cola
 
 ## Observações
 
-- O script depende dos seletores do modal, de `span.fontBlackBold` (número da comunicação) e de `#complemento` (campo). Se o TSE alterar o HTML da tela, o botão pode deixar de aparecer.
+- O script depende da estrutura do modal ou formulário, de `span.fontBlackBold` (número da comunicação) e de `#complemento` (campo). Se o TSE alterar o HTML da tela, o botão pode deixar de aparecer.
 - Confira sempre o complemento antes de enviar, principalmente quando o aviso indicar remoção de pontuação.
 - Este é um projeto independente e **não é oficial do TSE**.

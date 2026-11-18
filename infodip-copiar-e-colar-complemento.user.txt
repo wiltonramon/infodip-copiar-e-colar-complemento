@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Botão Copiar e Colar complemento no INFODIP
 // @namespace    https://greasyfork.org/pt-BR/scripts/542953
-// @version      4.6.1
+// @version      4.6.2
 // @description  Preenche e copia o complemento em maiúsculas, reconhecendo a comunicação no modal (número/ano-UF), com limpeza de repetições, remoção de INFODIP anterior e cópia confirmada via GM.setClipboard.
 // @author       Ramon Machado
 // @match        https://infodip.tse.jus.br/infodip/*
@@ -182,28 +182,49 @@
 
     const SELETOR_MODAL = 'dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], .modal, .ui-dialog, .rich-modalpanel, .rf-pp';
     const SELETOR_CAMPO = 'textarea[id="complemento"], input[id="complemento"]';
+    const SELETOR_ACAO_ELO = '[id="Processar Comunicação no Sistema ELO"]';
+    const ID_BOTAO = 'btnInfodipRemoverDuplicacao';
 
     const limiteDeCaracteres = (campo) =>
         Number.isInteger(campo.maxLength) && campo.maxLength >= 0
             ? Math.min(LIMITE_MAXIMO, campo.maxLength) : LIMITE_MAXIMO;
 
-    function localizarNoModal(modal, seletor) {
-        return Array.from(modal.querySelectorAll(seletor)).filter(elemento =>
-            elemento.closest(SELETOR_MODAL) === modal &&
-            !elemento.closest('[hidden], [aria-hidden="true"], [inert]') &&
-            elemento.getClientRects().length &&
-            getComputedStyle(elemento).visibility === 'visible'
+    function estaVisivel(elemento) {
+        return !elemento.closest('[hidden], [aria-hidden="true"], [inert]') &&
+            elemento.getClientRects().length > 0 &&
+            getComputedStyle(elemento).visibility === 'visible';
+    }
+
+    function localizarNoContexto(contexto, seletor) {
+        const modal = contexto.closest(SELETOR_MODAL);
+        return Array.from(contexto.querySelectorAll(seletor)).filter(elemento =>
+            elemento.closest(SELETOR_MODAL) === modal && estaVisivel(elemento)
         );
     }
 
-    function localizarCampo(modal) {
-        const campos = localizarNoModal(modal, SELETOR_CAMPO);
+    function localizarContexto(campo) {
+        const modal = campo.closest(SELETOR_MODAL);
+        if (modal) return modal;
+
+        // Na interface antiga, o controle do ELO identifica o bloco da comunicação.
+        // Para no primeiro bloco que contém o campo e a ação, mesmo se o número estiver ausente.
+        for (let bloco = campo.parentElement; bloco && bloco !== document.body; bloco = bloco.parentElement) {
+            const acoes = localizarNoContexto(bloco, SELETOR_ACAO_ELO);
+            if (acoes.length === 1) return bloco;
+            if (acoes.length > 1) break;
+        }
+
+        return campo.closest('form');
+    }
+
+    function localizarCampo(contexto) {
+        const campos = localizarNoContexto(contexto, SELETOR_CAMPO);
         return campos.length === 1 ? campos[0] : null;
     }
 
-    function localizarComunicacoes(modal) {
+    function localizarComunicacoes(contexto) {
         const comunicacoes = new Map();
-        for (const elemento of localizarNoModal(modal, 'span.fontBlackBold')) {
+        for (const elemento of localizarNoContexto(contexto, 'span.fontBlackBold')) {
             const numero = elemento.textContent.trim().toUpperCase();
             if (REGEX_NUMERO_SPAN.test(numero) && !comunicacoes.has(numero)) {
                 comunicacoes.set(numero, { elemento, numero });
@@ -291,14 +312,16 @@
 
     let ocupado = false;
 
-    async function aoClicar(botao, modal) {
-        if (ocupado || !botao.isConnected || botao.closest(SELETOR_MODAL) !== modal) return;
+    async function aoClicar(botao, contexto) {
+        if (ocupado || !botao.isConnected || !contexto.contains(botao)) return;
         ocupado = true;
         botao.disabled = true;
         try {
-            const campo = localizarCampo(modal);
-            if (!campo || campo.disabled || campo.readOnly) return exibirAviso(MENSAGENS.semCampo, 'erro', botao);
-            const comunicacoes = localizarComunicacoes(modal);
+            const campo = localizarCampo(contexto);
+            if (!campo || campo.disabled || campo.readOnly || localizarContexto(campo) !== contexto) {
+                return exibirAviso(MENSAGENS.semCampo, 'erro', botao);
+            }
+            const comunicacoes = localizarComunicacoes(contexto);
             if (comunicacoes.length > 1) return exibirAviso(MENSAGENS.variasComunicacoes, 'alerta', botao);
             const [comunicacao] = comunicacoes;
             if (!comunicacao) return exibirAviso(MENSAGENS.semNumero, 'erro', botao);
@@ -322,7 +345,7 @@
         }
     }
 
-    function criarBotao(modal) {
+    function criarBotao(contexto) {
         const botao = document.createElement('button');
         botao.type = 'button';
         botao.textContent = 'Copiar e Colar';
@@ -330,32 +353,39 @@
             marginLeft: '10px', padding: '4px 8px', fontSize: '12px',
             cursor: 'pointer', fontWeight: 'bold'
         });
-        botao.addEventListener('click', () => { void aoClicar(botao, modal); });
+        botao.addEventListener('click', () => { void aoClicar(botao, contexto); });
         return botao;
     }
 
-    const botoesDosModais = new Map();
+    const botoesDosContextos = new Map();
 
     function sincronizarBotoes() {
-        const modaisComBotao = new Set();
-        for (const modal of document.querySelectorAll(SELETOR_MODAL)) {
-            const campo = localizarCampo(modal);
-            if (!campo) continue;
+        const contextosComBotao = new Set();
+        for (const campo of document.querySelectorAll(SELETOR_CAMPO)) {
+            if (!estaVisivel(campo)) continue;
+            const contexto = localizarContexto(campo);
+            if (!contexto || localizarCampo(contexto) !== campo) continue;
 
-            const comunicacoes = localizarComunicacoes(modal);
+            const comunicacoes = localizarComunicacoes(contexto);
             if (comunicacoes.length === 0) continue;
 
             const ancora = comunicacoes.length === 1 ? comunicacoes[0].elemento : campo;
-            const botao = botoesDosModais.get(modal) ?? criarBotao(modal);
+            const botao = botoesDosContextos.get(contexto) ?? criarBotao(contexto);
             if (botao.previousSibling !== ancora) ancora.after(botao);
-            botoesDosModais.set(modal, botao);
-            modaisComBotao.add(modal);
+            botoesDosContextos.set(contexto, botao);
+            contextosComBotao.add(contexto);
         }
 
-        for (const [modal, botao] of botoesDosModais) {
-            if (modaisComBotao.has(modal)) continue;
-            botao.remove();
-            botoesDosModais.delete(modal);
+        for (const [contexto, botao] of botoesDosContextos) {
+            if (!contextosComBotao.has(contexto)) {
+                botao.remove();
+                botoesDosContextos.delete(contexto);
+            } else if (contextosComBotao.size === 1) {
+                // Outro script do INFODIP usa este ID para se posicionar ao lado do botão.
+                if (botao.id !== ID_BOTAO) botao.id = ID_BOTAO;
+            } else if (botao.id === ID_BOTAO) {
+                botao.removeAttribute('id');
+            }
         }
     }
 
