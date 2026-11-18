@@ -2,7 +2,7 @@
 
 Script de usuário para o **INFODIP** (TSE) que preenche o campo **Complemento** com o número da comunicação, corrige repetições e copia o texto final para a área de transferência com um único clique.
 
-- **Versão:** 4.6.2
+- **Versão:** 4.6.3
 - **Autor:** Ramon Machado
 - **Licença:** GPL-3.0-or-later
 - **Requer:** Tampermonkey (ou gerenciador compatível com `GM.setClipboard`)
@@ -11,7 +11,7 @@ Script de usuário para o **INFODIP** (TSE) que preenche o campo **Complemento**
 
 ## O que o script faz
 
-O script procura o campo **Complemento** e o número da comunicação (formato `número/ano-UF`, por exemplo `269/2026-CE`) no mesmo modal visível. Quando identifica um único número, coloca o botão **Copiar e Colar** ao lado dele. Ao clicar:
+A v4.6.3 restaura a detecção da v4.6.0. O script localiza o campo **Complemento** e procura o número da comunicação (formato `número/ano-UF`, por exemplo `269/2026-CE`). A busca prioriza o formulário do campo e recorre à página quando o formulário não contém um número válido. Quando identifica um único número distinto no escopo da busca, coloca o botão **Copiar e Colar** ao lado dele. Ao clicar:
 
 1. Lê o texto atual do campo **Complemento**.
 2. Normaliza e limpa o texto.
@@ -45,7 +45,7 @@ A palavra só é removida quando aparece isolada. Textos como `MINFODIPX` não s
 ### Inclusão do INFODIP atual
 - Acrescenta ` INFODIP número/ano-UF` no final do complemento.
 - Se o número da comunicação já aparece no texto, não duplica.
-- Se houver mais de um número diferente no mesmo modal, o botão aparece ao lado do campo **Complemento**. Ao clicar, o script exibe um aviso e preserva o campo e a área de transferência. Repetições do mesmo número contam como uma única comunicação.
+- O botão aparece quando a busca encontra um único número distinto. Repetições do mesmo número contam como uma única comunicação.
 
 ### Limite de caracteres
 - Respeita o limite de **70 caracteres**, ou o `maxlength` do campo, se for menor.
@@ -59,8 +59,7 @@ A palavra só é removida quando aparece isolada. Textos como `MINFODIPX` não s
 
 ### Proteções
 - Bloqueia cliques repetidos enquanto a operação está em andamento.
-- Confere novamente o campo e os números visíveis dentro do modal **no momento do clique**, inclusive quando a tela é atualizada.
-- Na interface antiga, reconhece o bloco do campo pelo botão **Processar Comunicação no Sistema ELO** ou pelo formulário do próprio campo.
+- Confere novamente o campo e o número da comunicação **no momento do clique**, inclusive quando a tela é atualizada.
 - Não age nas páginas de consulta (lista abaixo).
 
 ---
@@ -101,7 +100,6 @@ Exemplo de compactação, com campo limitado a 33 caracteres:
 | Campo editado durante a cópia | ⚠️ Sua edição foi preservada; a área de transferência pode conter o texto anterior. |
 | Campo indisponível | ⚠️ O campo complemento não está disponível para edição. |
 | Número não identificado | ⚠️ Não foi possível identificar com segurança o número da comunicação. |
-| Mais de uma comunicação no modal | ⚠️ Mais de uma comunicação foi encontrada neste modal. Abra o modal da comunicação desejada e tente novamente. |
 | Erro inesperado | ⚠️ Não foi possível concluir a operação. Confira o complemento antes de tentar novamente. |
 
 Os avisos de sucesso somem em cerca de 2,5 segundos. Os alertas e erros ficam por cerca de 4,5 segundos.
@@ -165,21 +163,19 @@ As etapas da preparação ficam na lista `ETAPAS`, em ordem: `normalizar`, `cola
 | Função | O que faz |
 |---|---|
 | `limiteDeCaracteres` | Calcula o limite efetivo (70 ou o `maxlength` do campo). |
-| `localizarContexto` | Identifica o modal, o bloco da comunicação na interface antiga ou o formulário do campo. |
-| `localizarCampo` | Encontra o campo Complemento visível e único no contexto identificado. |
-| `localizarComunicacoes` | Identifica os números distintos e visíveis no mesmo contexto. |
+| `localizarComunicacao` | Identifica um único número distinto, priorizando o formulário do campo. |
 | `exibirAviso` / `ocultarAviso` | Mostram e escondem o aviso na camada superior do navegador (`popover`). |
 | `destacarCampo` | Destaca o campo em verde sem deixar a cor presa. |
 | `definirValor` | Grava o valor e dispara os eventos `input` e `change`. |
 | `copiarTexto` | Copia via `GM.setClipboard`, com `navigator.clipboard` de reserva. |
 | `aoClicar` | Fluxo completo do clique no botão. |
-| `sincronizarBotoes` | Posiciona um botão por modal, junto ao número identificado ou junto ao campo em caso de ambiguidade. |
+| `sincronizarBotao` | Posiciona um único botão junto ao número identificado. |
 | `agendarSincronizacao` | Agrupa as mudanças da página em uma verificação por quadro de animação. |
 
 ---
 
 ## Observações
 
-- O script depende da estrutura do modal ou formulário, de `span.fontBlackBold` (número da comunicação) e de `#complemento` (campo). Se o TSE alterar o HTML da tela, o botão pode deixar de aparecer.
+- O script usa `span.fontBlackBold` para encontrar o número da comunicação e `#complemento` para localizar o campo.
 - Confira sempre o complemento antes de enviar, principalmente quando o aviso indicar remoção de pontuação.
 - Este é um projeto independente e **não é oficial do TSE**.
